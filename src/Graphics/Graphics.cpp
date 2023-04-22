@@ -22,8 +22,6 @@ ID3D11Texture2D* GRAPHICS::g_pBackBuffer = nullptr;
 D3D11_VIEWPORT* GRAPHICS::g_pViewport = nullptr;
 ID3D11RenderTargetView* GRAPHICS::g_mainRenderTargetView = nullptr;
 
-uint64_t GRAPHICS::last_frame_render_time = 0;
-
 ID3D11Buffer* GRAPHICS::g_VertexBuffer = nullptr;
 ID3D11Buffer* GRAPHICS::g_ConstantBuffer_Matrix = nullptr;
 ID3D11Buffer* GRAPHICS::g_ConstantBuffer_Circles = nullptr;
@@ -40,7 +38,13 @@ unsigned int GRAPHICS::frameIdx = 1;
 float GRAPHICS::g_Viewport_Width = GUI::windowX - WINDOW_X_MARGIN;
 float GRAPHICS::g_Viewport_Height = GUI::windowY - WINDOW_Y_MARGIN;
 
-cb_VertexShader GRAPHICS::g_cb_vertexShader_data;
+cb_CameraTransform GRAPHICS::g_cb_CameraTransform_data;
+uint64_t GRAPHICS::last_frame_render_time = 0;
+Camera* GRAPHICS::g_pMainCamera = nullptr;
+
+// The actual camera used to "render" vertices
+Camera* pVertexCamera = nullptr;
+
 
 #define GET_ACTUAL_CB_SIZE(size) (sizeof(size) + (16 - (sizeof(size) % 16)))
 
@@ -204,7 +208,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	desc.MiscFlags = 0;
-	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_VertexShader));
+	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_CameraTransform));
 	desc.StructureByteStride = 0;
 
 	hr = g_pd3dDevice->CreateBuffer(&desc, 0, &g_ConstantBuffer_Matrix);
@@ -238,6 +242,9 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_Circles, 0);
 	g_pd3dDeviceContext->PSSetConstantBuffers(1, 1, &g_ConstantBuffer_Circles);
 
+	g_pMainCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 60.f);
+	pVertexCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 90.f);
+
 	return true;
 }
 
@@ -255,9 +262,7 @@ int GRAPHICS::RenderFrame()
 	g_pd3dDeviceContext->ClearDepthStencilView(g_DepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1u, 1u);
 	g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clearColor);
 
-	float aspectRatio = static_cast<float>(g_pViewport->Width + WINDOW_X_MARGIN) / static_cast<float>(g_pViewport->Height + WINDOW_Y_MARGIN);
-	float fovDegrees = 60; //90 Degree Field of View
-	float fovRadians = (fovDegrees / 360.0f) * DirectX::XM_2PI;
+	float aspectRatio = (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN);
 
 	float vert_unit_x = aspectRatio;// tanf(fovRadians * 0.5f)* aspectRatio;
 	float vert_unit_y = 1;// tanf(fovRadians * 0.5f);
@@ -279,37 +284,27 @@ int GRAPHICS::RenderFrame()
 
 
 	// Update Constant Buffer Data
-	g_cb_vertexShader_data.mx = DirectX::XMMatrixTranslation(0, 0, 0);
-	g_cb_vertexShader_data.mx = DirectX::XMMatrixTranspose(g_cb_vertexShader_data.mx);
+	g_cb_CameraTransform_data.viewProj[0] = pVertexCamera->aspectRatio;
+	g_cb_CameraTransform_data.viewProj[1] = g_cb_CameraTransform_data.viewProj[2] = 1;
 
-	DirectX::XMMATRIX world = DirectX::XMMatrixIdentity();
-	static DirectX::XMVECTOR eyePos = DirectX::XMVectorSet(0.0f, 0.f, -1.f, 0.0f);
+	CopyMemory(g_cb_CameraTransform_data.camPos, &pVertexCamera->pos, sizeof(float) * 4);
 
-	static DirectX::XMVECTOR lookAtPos = DirectX::XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f); //Look at center of the world
-	static DirectX::XMVECTOR upVector = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); //Positive Y Axis = Up
-	DirectX::XMMATRIX viewMatrix = DirectX::XMMatrixLookAtLH(eyePos, lookAtPos, upVector);
-	float nearZ = 1.f;
-	float farZ = 100.0f;
-	float planeHeight = 2 * nearZ * tanf(fovRadians / 2);
-	g_cb_vertexShader_data.viewProj[0] = aspectRatio * (fovDegrees / 90.f);
-	g_cb_vertexShader_data.viewProj[1] = (fovDegrees / 90.f);
-	g_cb_vertexShader_data.viewProj[2] = 1;
+	g_cb_CameraTransform_data.frameIdx = frameIdx;
 
-	CopyMemory(g_cb_vertexShader_data.camPos, &eyePos.m128_f32, sizeof(float) * 4);
+	g_cb_CameraTransform_data.mx = pVertexCamera->GetTransformationMatrix();
 
-	g_cb_vertexShader_data.frameIdx = frameIdx;
+	float fovFrac = g_pMainCamera->vFov / 90.f;
+	g_cb_CameraTransform_data.viewProj[0] = g_pMainCamera->aspectRatio * fovFrac;
+	g_cb_CameraTransform_data.viewProj[1] = fovFrac;
+	g_cb_CameraTransform_data.viewProj[2] = 1;
 
-	DirectX::XMMATRIX projectionMatrix = DirectX::XMMatrixPerspectiveFovLH(DirectX::XM_PIDIV2, aspectRatio, nearZ, farZ);
-
-	g_cb_vertexShader_data.mx = world * viewMatrix * projectionMatrix;
-	g_cb_vertexShader_data.mx = DirectX::XMMatrixTranspose(g_cb_vertexShader_data.mx);
-
-	g_cb_vertexShader_data.screenSize[0] = g_pViewport->Width;
-	g_cb_vertexShader_data.screenSize[1] = g_pViewport->Height;
+	g_cb_CameraTransform_data.screenSize[0] = g_pViewport->Width;
+	g_cb_CameraTransform_data.screenSize[1] = g_pViewport->Height;
 
 	D3D11_MAPPED_SUBRESOURCE mappedResource;
 	HRESULT hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_Matrix, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-	CopyMemory(mappedResource.pData, &g_cb_vertexShader_data, sizeof(cb_VertexShader));
+	assert(SUCCEEDED(hr));
+	CopyMemory(mappedResource.pData, &g_cb_CameraTransform_data, sizeof(cb_CameraTransform));
 	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_Matrix, 0);
 	g_pd3dDeviceContext->VSSetConstantBuffers(0, 1, &g_ConstantBuffer_Matrix);
 	g_pd3dDeviceContext->PSSetConstantBuffers(0, 1, &g_ConstantBuffer_Matrix);
@@ -439,6 +434,15 @@ void GRAPHICS::CreateRenderTarget()
 
 	hr = g_pd3dDevice->CreateTexture2D(&texDesc, nullptr, &g_TargetTexture);
 	assert(SUCCEEDED(hr));
+
+	if (g_pViewport) {
+		float aspectRatio = (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN);
+		pVertexCamera->aspectRatio = aspectRatio;
+		g_pMainCamera->aspectRatio = aspectRatio;
+
+		pVertexCamera->UpdateTransformMatrix();
+		g_pMainCamera->UpdateTransformMatrix();
+	}
 }
 
 void GRAPHICS::CleanupRenderTarget()

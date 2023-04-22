@@ -11,7 +11,7 @@
 
 ------------------ TODO ------------------
 ////// The order of these is RANDOM //////
-- Move camera to it's own class.
++ Move camera to it's own class.
 - Add UI for rendering frame with selected sample amount and rendering animations.
 - Adding objects.
 - UI for modifying added objects and camera parameters.
@@ -34,7 +34,7 @@ int OnGui()
 	//ImGui::Text("View Matrix:");
 	//{
 	//	for (int dx = 0; dx < 4; dx++) {
-	//			ImGui::Text("%.3f %.3f %.3f %.3f", GRAPHICS::g_cb_vertexShader_data.mx.r[dx].m128_f32[0], GRAPHICS::g_cb_vertexShader_data.mx.r[dx].m128_f32[1], GRAPHICS::g_cb_vertexShader_data.mx.r[dx].m128_f32[2], GRAPHICS::g_cb_vertexShader_data.mx.r[dx].m128_f32[3]);
+	//			ImGui::Text("%.3f %.3f %.3f %.3f", GRAPHICS::g_cb_CameraTransform_data.mx.r[dx].m128_f32[0], GRAPHICS::g_cb_CameraTransform_data.mx.r[dx].m128_f32[1], GRAPHICS::g_cb_CameraTransform_data.mx.r[dx].m128_f32[2], GRAPHICS::g_cb_CameraTransform_data.mx.r[dx].m128_f32[3]);
 	//	}
 	//}
 

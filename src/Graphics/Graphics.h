@@ -3,6 +3,8 @@
 #include <vector>
 
 #include "BufferTypes.h"
+#include "Camera.h"
+#include "Types.h"
 
 #ifndef SRC_GRAPHICS_GRAPHICS_H
 #define SRC_GRAPHICS_GRAPHICS_H
@@ -31,13 +33,16 @@ namespace GRAPHICS
 	extern ID3D11DepthStencilView* g_DepthStencilView;
 	extern ID3D11SamplerState* g_BackBufferSamplerState;
 
-	extern cb_VertexShader g_cb_vertexShader_data;
+	extern cb_CameraTransform g_cb_CameraTransform_data;
 
 	extern uint64_t last_frame_render_time;
 
 	extern unsigned int frameIdx;
 	extern float g_Viewport_Width;
 	extern float g_Viewport_Height;
+
+	// "Virtual" camera used for ray tracing
+	extern Camera* g_pMainCamera;
 
 	bool Setup(int (*DrawGuiFunc)(), HWND hwnd);
 	void Destroy();
@@ -49,23 +54,6 @@ namespace GRAPHICS
 
 	ID3D11ShaderResourceView* SaveFrameToFile();
 	void AdvanceFrame();
-
-	class Vector3
-	{
-	public:
-		float x = 0, y = 0, z = 0;
-
-		Vector3(float _x, float _y = 0, float _z = 0) : x(_x), y(_y), z(_z) {};
-
-		operator float* () { return &x; };
-	};
-
-	struct Vertex
-	{
-		float Position[3];
-		float Color[3];
-		float UV[2];
-	};
 
 	Vertex cur_vtx_arr[];
 }

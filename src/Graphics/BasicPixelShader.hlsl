@@ -177,14 +177,16 @@ PixelOutput main(PixelInput pixelInput)
     float3 localViewPoint = float3(uv - 0.5f, 1) * vp.getData();
     float3 pointView = mul(mx, float4(localViewPoint, 1));
     
-    float2 rd = float2((uv - 0.5f) * screenSize.xy) / screenSize.y;
-    
-    float3 outColor = 1;
-    float3 outLight = 0;
+    //float2 rd = float2((uv - 0.5f) * screenSize.xy) / screenSize.y;
     
     float3 TotalIncomingLight = 0;
     
     uint MAX_RAY_COUNT = 10;
+    
+            
+    float3 outColor = 1;
+    float3 outLight = 0;
+   
     Ray ray;
     
     for (int rayIdx = 0; rayIdx < MAX_RAY_COUNT; rayIdx++)
@@ -213,6 +215,7 @@ PixelOutput main(PixelInput pixelInput)
             outLight += emittedLight * outColor;
             outColor *= hit.mat.baseColor;
         }
+
         TotalIncomingLight += outLight;
 
     }

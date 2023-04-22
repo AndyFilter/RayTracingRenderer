@@ -1,8 +1,22 @@
+struct ViewParams
+{
+    float width;
+    float height;
+    float nearPlaneClip;
+    
+    float3 getData()
+    {
+        return float3(width, height, nearPlaneClip);
+    }
+};
+
 cbuffer cameraInfo : register(b0)
 {
     float4x4 mx;
     float4 camPos;
-    float3 viewProj;
+    float2 screenSize;
+    ViewParams vp;
+    uint frameIdx;
 };
 
 struct VertexInput

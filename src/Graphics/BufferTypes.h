@@ -2,7 +2,7 @@
 
 #include <DirectXMath.h>
 
-struct cb_VertexShader
+struct cb_CameraTransform
 {
 	DirectX::XMMATRIX mx;
 	float camPos[4];
@@ -11,7 +11,7 @@ struct cb_VertexShader
 	float viewProj[3];
 	unsigned int frameIdx;
 
-	cb_VertexShader() = default;
+	cb_CameraTransform() = default;
 };
 
 struct Material

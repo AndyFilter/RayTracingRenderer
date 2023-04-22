@@ -40,7 +40,9 @@
     <ClInclude Include="External\ImGui\imstb_textedit.h" />
     <ClInclude Include="External\ImGui\imstb_truetype.h" />
     <ClInclude Include="src\Graphics\BufferTypes.h" />
+    <ClInclude Include="src\Graphics\Camera.h" />
     <ClInclude Include="src\Graphics\Graphics.h" />
+    <ClInclude Include="src\Graphics\Types.h" />
     <ClInclude Include="src\GUI\gui.h" />
   </ItemGroup>
   <ItemGroup>
