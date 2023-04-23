@@ -12,12 +12,14 @@
 ------------------ TODO ------------------
 ////// The order of these is RANDOM //////
 + Move camera to it's own class.
++ Spend an entire day on a single bug that no one would even notice.
 - Add UI for rendering frame with selected sample amount and rendering animations.
 - Adding objects.
 - UI for modifying added objects and camera parameters.
 - Switch from using the deprecated D3DX11SaveTextureToFileA to the new lib
 - UI for ray trace settings.
 - Clean up RenderFrame in GRAPHICS namespace.
++ Fix gamma when writing to file GRAPHICS::SaveFrameToFile() 
 
 */
 
@@ -42,18 +44,32 @@ int OnGui()
 	if (ImGui::TreeNodeEx("Rendering", ImGuiTreeNodeFlags_DefaultOpen))
 	{
 		//static ID3D11ShaderResourceView* tex;
-
+		ImGui::Text("Frame: %i", GRAPHICS::frameIdx);
 		if (ImGui::Button("Render Frame"))
 		{
 			GRAPHICS::SaveFrameToFile();
 		}
 		ImGui::SameLine();
-		if (ImGui::Button("Advance Frame"))
 		{
-			GRAPHICS::AdvanceFrame();
+			auto curTime = last_frame_render_time.time_since_epoch().count();
+			static uint64_t clickedTime;
+			if(ImGui::Button("Advance Frame"))
+				GRAPHICS::AdvanceFrame();
+			if (ImGui::IsItemActivated()) {
+				clickedTime = curTime;
+			}
+
+			if (ImGui::IsItemDeactivated())
+			{
+				clickedTime = (uint64_t)-1;
+			}
+
+			if (ImGui::IsItemActive() && ImGui::IsItemHovered() && (curTime - clickedTime) > 150000000) {
+				GRAPHICS::AdvanceFrame();
+			}
 		}
 
-		ImGui::Image(GRAPHICS::g_ShaderResourceViewMap, { 200 * GRAPHICS::g_Viewport_Width / GRAPHICS::g_Viewport_Height,200 });
+		ImGui::Image(GRAPHICS::g_RayTracingLastFrameSRV, { 200 * GRAPHICS::g_Viewport_Width / GRAPHICS::g_Viewport_Height,200 });
 
 		ImGui::TreePop();
 	}

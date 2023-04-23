@@ -19,17 +19,20 @@ namespace GRAPHICS
 	extern ID3D11Texture2D* g_pBackBuffer;
 	extern D3D11_VIEWPORT* g_pViewport;
 	extern ID3D11RenderTargetView* g_mainRenderTargetView;
+	extern ID3D11RenderTargetView* g_rayTracingRTV;
 
 	extern ID3D11Buffer* g_VertexBuffer;
 	extern ID3D11Buffer* g_ConstantBuffer_Matrix;
 	extern ID3D11Buffer* g_ConstantBuffer_Circles;
-	extern ID3D10Blob* g_VertexShaderCode, * g_PixelShaderCode;
+	extern ID3D10Blob* g_VertexShaderCode, * g_PixelShaderCode, *g_DisplayTexturePSCode;
 	extern ID3D11VertexShader* g_VertexShader;
 	extern ID3D11PixelShader* g_PixelShader;
+	extern ID3D11PixelShader* g_DisplayTexturePS;
 	extern ID3D11InputLayout* g_InputLayout;
 	extern ID3D11Texture2D* g_TargetTexture;
+	extern ID3D11Texture2D* g_TargetResourceViewTexture;
 	extern ID3D11Texture2D* g_DepthStencilBuffer;
-	extern ID3D11ShaderResourceView* g_ShaderResourceViewMap;
+	extern ID3D11ShaderResourceView* g_RayTracingLastFrameSRV;
 	extern ID3D11DepthStencilView* g_DepthStencilView;
 	extern ID3D11SamplerState* g_BackBufferSamplerState;
 
@@ -52,7 +55,7 @@ namespace GRAPHICS
 	void CreateRenderTarget();
 	void CleanupRenderTarget();
 
-	ID3D11ShaderResourceView* SaveFrameToFile();
+	void SaveFrameToFile();
 	void AdvanceFrame();
 
 	Vertex cur_vtx_arr[];

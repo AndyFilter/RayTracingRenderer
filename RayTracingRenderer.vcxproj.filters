@@ -90,5 +90,6 @@
   <ItemGroup>
     <FxCompile Include="src\Graphics\BasicPixelShader.hlsl" />
     <FxCompile Include="src\Graphics\BasicVertexShader.hlsl" />
+    <FxCompile Include="src\Graphics\DisplayTexturePS.hlsl" />
   </ItemGroup>
 </Project>

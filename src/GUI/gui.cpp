@@ -200,9 +200,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		if (windowLastChangeState & WND_SIZE && !(windowLastChangeState & WND_MOVE)) {
 			WindowResize();
 		}
-			windowLastChangeState &= ~(WND_SIZE | WND_MOVE);
+		windowLastChangeState &= ~(WND_SIZE | WND_MOVE);
 		return 0;
-	case WM_MOVE:
+	case WM_MOVING:
 		windowLastChangeState |= WND_MOVE; // 0b00000010
 		break;
 	case WM_GETMINMAXINFO:

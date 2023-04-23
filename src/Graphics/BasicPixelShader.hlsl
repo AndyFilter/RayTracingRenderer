@@ -54,7 +54,7 @@ struct PixelInput
 
 struct PixelOutput
 {
-    float4 attachment0 : SV_Target0;
+    float4 color : SV_Target0;
 };
 
 struct Ray
@@ -142,7 +142,7 @@ HitInfo RaySphereCollision(Ray ray, float radius, float3 sphereCenter)
     return hit;
 }
 
-HitInfo TraceRay(Ray ray)
+HitInfo RayCollision(Ray ray)
 {
     HitInfo closestHit = (HitInfo) 0;
     closestHit.wasHit = false;
@@ -161,6 +161,42 @@ HitInfo TraceRay(Ray ray)
     return closestHit;
 }
 
+float3 TraceRay(Ray ray, inout uint rngState)
+{
+    float3 outRayColor = 1.f;
+    float3 outLight = 0.f;
+    
+    for (int i = 0; i <= 4; i++)
+    {
+        HitInfo hit = RayCollision(ray);
+
+        if (!hit.wasHit)
+            break;
+        
+        Material material = hit.mat;
+            
+        ray.origin = hit.worldPoint;
+
+        float3 diffDir = normalize(hit.normal + RandomDirection(rngState));
+        float3 reflectedDir = reflect(ray.dir, hit.normal);
+            
+        ray.dir = normalize(lerp(reflectedDir, diffDir, material.roughness));
+        
+        float3 emittedLight = material.emissionColor * material.emission;
+        outLight += emittedLight * outRayColor;
+        outRayColor *= material.baseColor;
+        
+        float p = max(outRayColor.r, max(outRayColor.g, outRayColor.b));
+        if (RandomValue(rngState) >= p)
+        {
+            break;
+        }
+        outRayColor *= 1.0f / p;
+    }
+    
+    return outLight;
+}
+
 PixelOutput main(PixelInput pixelInput)
 {
     PixelOutput output;
@@ -171,63 +207,43 @@ PixelOutput main(PixelInput pixelInput)
     
     uint rngState = pixelIndex + frameIdx * 75391;
     
-    output.attachment0 = float4(0, 0, 0, 1);
+    //output.attachment0 = float4(1, 1, 1, 1);
     //output.attachment0.xy = uv.xy;
     
     float3 localViewPoint = float3(uv - 0.5f, 1) * vp.getData();
-    float3 pointView = mul(mx, float4(localViewPoint, 1));
+    //float3 pointView = mul(mx, float4(localViewPoint, 1));
     
     //float2 rd = float2((uv - 0.5f) * screenSize.xy) / screenSize.y;
     
-    float3 TotalIncomingLight = 0;
-    
-    uint MAX_RAY_COUNT = 10;
+    const uint MAX_RAY_COUNT = 5;
     
             
-    float3 outColor = 1;
-    float3 outLight = 0;
+    //float3 outColor = 1;
+    //float3 outLight = 0;
    
     Ray ray;
+    ray.origin.xyz = camPos.xyz;
+    ray.dir = normalize(localViewPoint);
+    
+    float3 TotalIncomingLight = 0.f;
     
     for (int rayIdx = 0; rayIdx < MAX_RAY_COUNT; rayIdx++)
     {
-        ray.origin.xyz = camPos.xyz;
-        ray.dir = normalize(localViewPoint);
-        
-        for (int i = 0; i <= 4; i++)
-        {
-            HitInfo hit = TraceRay(ray);
-
-            if (!hit.wasHit)
-                break;
-            
-            ray.origin = hit.worldPoint;
-
-            float3 diffDir = normalize(hit.normal + RandomDirection(rngState));
-            diffDir *= sign(dot(hit.normal, diffDir));
-           
-            float3 reflectedDir = reflect(ray.dir, hit.normal);
-            
-            ray.dir = lerp(reflectedDir, diffDir, hit.mat.roughness);
-            
-            
-            float3 emittedLight = hit.mat.emissionColor * hit.mat.emission;
-            outLight += emittedLight * outColor;
-            outColor *= hit.mat.baseColor;
-        }
-
-        TotalIncomingLight += outLight;
-
+        TotalIncomingLight += TraceRay(ray, rngState);
     }
-    float4 lastFrameColor = backTex.Sample(texSampler, pixelInput.uv);
+    float3 lastFrameColor = backTex.Sample(texSampler, pixelInput.uv).xyz;
 
-    output.attachment0.xyz = TotalIncomingLight / MAX_RAY_COUNT;
+    float3 curColor = TotalIncomingLight / MAX_RAY_COUNT;
+
     
     // Average all frames
-    float weight = 1.0 / (frameIdx);
-    float4 accumulatedCol = saturate(lastFrameColor * (1 - weight) + output.attachment0 * weight);
+    float weight = 1.0 / frameIdx;
+    float3 accumulatedCol = (lastFrameColor * (1.f - weight)) + (curColor * weight);
     
-    output.attachment0 = accumulatedCol;
+    //output.color = float4(weight, weight, weight, 1);
+    output.color = float4(accumulatedCol, 1);
+    
+    //output.color = frameIdx/2.f;
     
     return output;
 }
