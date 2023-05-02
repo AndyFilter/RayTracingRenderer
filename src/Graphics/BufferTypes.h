@@ -10,6 +10,7 @@ struct cb_CameraTransform
 	float padding[2];
 	float viewProj[3];
 	unsigned int frameIdx;
+	unsigned int renderFlags;
 
 	cb_CameraTransform() = default;
 };

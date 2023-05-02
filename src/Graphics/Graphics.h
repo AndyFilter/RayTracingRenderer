@@ -44,6 +44,8 @@ namespace GRAPHICS
 	extern float g_Viewport_Width;
 	extern float g_Viewport_Height;
 
+	extern bool g_UseCorrectedGamma;
+
 	// "Virtual" camera used for ray tracing
 	extern Camera* g_pMainCamera;
 
@@ -55,8 +57,8 @@ namespace GRAPHICS
 	void CreateRenderTarget();
 	void CleanupRenderTarget();
 
-	void SaveFrameToFile();
-	void AdvanceFrame();
+	void SaveFrameToFile(bool advanceFrame = false);
+	void AdvanceFrame(bool renderFrame = false);
 
 	Vertex cur_vtx_arr[];
 }

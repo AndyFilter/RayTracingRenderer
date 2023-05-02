@@ -180,11 +180,11 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		//printf("Requested res: (%u, %u)\n", windowSize_X, windowSize_Y);
 		if (wParam == SIZE_MINIMIZED) {
 			windowLastChangeState |= WND_IS_MINIMIZED;
-			windowLastChangeState &= ~WND_IS_MAXIMIZED;
+			//windowLastChangeState &= ~WND_IS_MAXIMIZED;
 		}
 		if (wParam == SIZE_MAXIMIZED) {
 			windowLastChangeState |= WND_IS_MAXIMIZED;
-			windowLastChangeState &= ~WND_IS_MINIMIZED;
+			//windowLastChangeState &= ~WND_IS_MINIMIZED;
 		}
 
 		if (((wParam == SIZE_MAXIMIZED || wParam == SIZE_MAXSHOW || restore_clicked) && !(windowLastChangeState & WND_IS_MINIMIZED)) || (windowLastChangeState & WND_IS_MAXIMIZED && wParam == SIZE_RESTORED)) {

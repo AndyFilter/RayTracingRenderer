@@ -38,6 +38,7 @@ cbuffer CameraInfo : register(b0)
     float2 screenSize;
     ViewParams vp;
     uint frameIdx;
+    uint renderFlags;
 };
 
 
@@ -215,7 +216,7 @@ PixelOutput main(PixelInput pixelInput)
     
     //float2 rd = float2((uv - 0.5f) * screenSize.xy) / screenSize.y;
     
-    const uint MAX_RAY_COUNT = 5;
+    const uint MAX_RAY_COUNT = 10;
     
             
     //float3 outColor = 1;
@@ -237,13 +238,12 @@ PixelOutput main(PixelInput pixelInput)
 
     
     // Average all frames
-    float weight = 1.0 / frameIdx;
+    float weight = 1.0 / (frameIdx+1);
     float3 accumulatedCol = (lastFrameColor * (1.f - weight)) + (curColor * weight);
     
     //output.color = float4(weight, weight, weight, 1);
     output.color = float4(accumulatedCol, 1);
     
-    //output.color = frameIdx/2.f;
     
     return output;
 }

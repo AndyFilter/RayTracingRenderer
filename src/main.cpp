@@ -18,11 +18,12 @@
 - UI for modifying added objects and camera parameters.
 - Switch from using the deprecated D3DX11SaveTextureToFileA to the new lib
 - UI for ray trace settings.
-- Clean up RenderFrame in GRAPHICS namespace.
+~ Clean up RenderFrame in GRAPHICS namespace.
 + Fix gamma when writing to file GRAPHICS::SaveFrameToFile() 
 
 */
 
+bool saveFrames = false;
 
 static std::chrono::steady_clock::time_point last_frame_render_time;
 uint64_t last_frame_time = 0;
@@ -45,16 +46,21 @@ int OnGui()
 	{
 		//static ID3D11ShaderResourceView* tex;
 		ImGui::Text("Frame: %i", GRAPHICS::frameIdx);
-		if (ImGui::Button("Render Frame"))
+
+		ImGui::Checkbox("Save to file", &saveFrames);
+		ImGui::SameLine();
+		ImGui::Checkbox("Correct Gamma", &GRAPHICS::g_UseCorrectedGamma);
+
+		if (ImGui::Button("Save one Frame"))
 		{
-			GRAPHICS::SaveFrameToFile();
+			GRAPHICS::SaveFrameToFile(true);
 		}
 		ImGui::SameLine();
 		{
 			auto curTime = last_frame_render_time.time_since_epoch().count();
 			static uint64_t clickedTime;
 			if(ImGui::Button("Advance Frame"))
-				GRAPHICS::AdvanceFrame();
+				GRAPHICS::AdvanceFrame(saveFrames);
 			if (ImGui::IsItemActivated()) {
 				clickedTime = curTime;
 			}
@@ -65,7 +71,7 @@ int OnGui()
 			}
 
 			if (ImGui::IsItemActive() && ImGui::IsItemHovered() && (curTime - clickedTime) > 150000000) {
-				GRAPHICS::AdvanceFrame();
+				GRAPHICS::AdvanceFrame(saveFrames);
 			}
 		}
 

@@ -46,7 +46,7 @@
     <ClInclude Include="src\GUI\gui.h" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="src\Graphics\BasicPixelShader.hlsl">
+    <FxCompile Include="src\Graphics\RayTracingPS.hlsl">
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Pixel</ShaderType>
       <ShaderType Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Pixel</ShaderType>
