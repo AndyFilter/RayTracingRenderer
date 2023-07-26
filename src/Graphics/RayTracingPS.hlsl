@@ -4,14 +4,19 @@ struct Material
     float emission;
     float3 emissionColor;
     float roughness;
-}; // size [64]
+    uint matFlags;
+}; // size [36]
+
+// Material Flags
+const uint MaterialFlags_None = 0;
+const uint MaterialFlags_Selected = 1;
 
 struct Sphere
 {
-    float3 pos; // 8 + 3 * 8 = 32
-    float radius; // 8
-    Material material; // 32 + 32 = 96
-};
+    float3 pos; // 4 + 3 * 4 = 32
+    float radius; // 4
+    Material material; // 16 + 16 + 4 = 68
+}; // [80]
 
 cbuffer object_data : register(b1)
 {
@@ -40,6 +45,12 @@ cbuffer CameraInfo : register(b0)
     uint frameIdx;
     uint renderFlags;
 };
+
+cbuffer RayTracingInfo : register(b2)
+{
+    uint rayCount;
+    uint rayMaxBounceAmount;
+}
 
 
 Texture2D backTex : Texture : register(t0);
@@ -156,6 +167,7 @@ HitInfo RayCollision(Ray ray)
         {
             closestHit = curHit;
             closestHit.mat = sphere[i].material;
+            
         }
     }
     
@@ -167,12 +179,20 @@ float3 TraceRay(Ray ray, inout uint rngState)
     float3 outRayColor = 1.f;
     float3 outLight = 0.f;
     
-    for (int i = 0; i <= 4; i++)
+    for (int i = 0; i <= rayMaxBounceAmount; i++)
     {
         HitInfo hit = RayCollision(ray);
 
         if (!hit.wasHit)
             break;
+        
+        if (hit.mat.matFlags & MaterialFlags_Selected == MaterialFlags_Selected)
+        {
+            float alpha = 1 - abs(dot(hit.normal, ray.dir));
+            if (alpha > 0.85)
+                return float3(1, 1, 1);
+
+        }
         
         Material material = hit.mat;
             
@@ -216,7 +236,7 @@ PixelOutput main(PixelInput pixelInput)
     
     //float2 rd = float2((uv - 0.5f) * screenSize.xy) / screenSize.y;
     
-    const uint MAX_RAY_COUNT = 10;
+    const uint MAX_RAY_COUNT = rayCount;
     
             
     //float3 outColor = 1;
@@ -231,6 +251,7 @@ PixelOutput main(PixelInput pixelInput)
     for (int rayIdx = 0; rayIdx < MAX_RAY_COUNT; rayIdx++)
     {
         TotalIncomingLight += TraceRay(ray, rngState);
+
     }
     float3 lastFrameColor = backTex.Sample(texSampler, pixelInput.uv).xyz;
 

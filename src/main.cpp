@@ -17,7 +17,7 @@
 - Adding objects.
 - UI for modifying added objects and camera parameters.
 - Switch from using the deprecated D3DX11SaveTextureToFileA to the new lib
-- UI for ray trace settings.
++ UI for ray trace settings.
 ~ Clean up RenderFrame in GRAPHICS namespace.
 + Fix gamma when writing to file GRAPHICS::SaveFrameToFile() 
 
@@ -30,6 +30,9 @@ uint64_t last_frame_time = 0;
 
 int OnGui()
 {
+	ImGui::SetNextWindowSize({ 400, 600 }, ImGuiCond_FirstUseEver);
+	ImGui::Begin("Scene", 0, ImGuiWindowFlags_NoResize);
+
 	ImGui::Text("Frame time: %lluus", GRAPHICS::last_frame_render_time);
 
 	ImGui::Text("FPS: %f", ImGui::GetIO().Framerate);
@@ -80,7 +83,23 @@ int OnGui()
 		ImGui::TreePop();
 	}
 
+	if (ImGui::TreeNodeEx("Ray-Tracing Settings", ImGuiTreeNodeFlags_DefaultOpen))
+	{
+		static cb_RT_Info local_RT_Info{10};
+
+		ImGui::SliderInt("Rays Per Pixel", reinterpret_cast<int*>(&local_RT_Info.rayCount), 1, 200);
+
+		ImGui::SliderInt("Max Bounce Amount", reinterpret_cast<int*>(&local_RT_Info.rayMaxBounce), 1, 20);
+
+		if(ImGui::Button("Save Settings"))
+			GRAPHICS::SetRayTracingSettings(local_RT_Info);
+
+		ImGui::TreePop();
+	}
+
 	//ImGui::ShowDemoWindow();
+
+	ImGui::End();
 
 	return 0;
 }

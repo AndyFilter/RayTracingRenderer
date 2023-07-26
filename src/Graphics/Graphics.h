@@ -1,6 +1,8 @@
 #pragma once
 #include <d3d11.h>
 #include <vector>
+#include <dxgidebug.h>
+#include <dxgi1_3.h>
 
 #include "BufferTypes.h"
 #include "Camera.h"
@@ -24,6 +26,7 @@ namespace GRAPHICS
 	extern ID3D11Buffer* g_VertexBuffer;
 	extern ID3D11Buffer* g_ConstantBuffer_Matrix;
 	extern ID3D11Buffer* g_ConstantBuffer_Circles;
+	extern ID3D11Buffer* g_ConstantBuffer_RT_Info;
 	extern ID3D10Blob* g_VertexShaderCode, * g_PixelShaderCode, *g_DisplayTexturePSCode;
 	extern ID3D11VertexShader* g_VertexShader;
 	extern ID3D11PixelShader* g_PixelShader;
@@ -35,6 +38,8 @@ namespace GRAPHICS
 	extern ID3D11ShaderResourceView* g_RayTracingLastFrameSRV;
 	extern ID3D11DepthStencilView* g_DepthStencilView;
 	extern ID3D11SamplerState* g_BackBufferSamplerState;
+
+	extern IDXGIDebug* g_pDXGIDebug;
 
 	extern cb_CameraTransform g_cb_CameraTransform_data;
 
@@ -57,8 +62,12 @@ namespace GRAPHICS
 	void CreateRenderTarget();
 	void CleanupRenderTarget();
 
+	void WindowResized();
+
 	void SaveFrameToFile(bool advanceFrame = false);
 	void AdvanceFrame(bool renderFrame = false);
+
+	void SetRayTracingSettings(cb_RT_Info info);
 
 	Vertex cur_vtx_arr[];
 }

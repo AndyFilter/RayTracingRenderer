@@ -9,6 +9,7 @@
 
 #include <d3d.h>
 #include <D3DX11tex.h>
+#include <cstdarg>
 
 
 using namespace GRAPHICS;
@@ -26,6 +27,7 @@ ID3D11RenderTargetView* GRAPHICS::g_rayTracingRTV = nullptr;
 ID3D11Buffer* GRAPHICS::g_VertexBuffer = nullptr;
 ID3D11Buffer* GRAPHICS::g_ConstantBuffer_Matrix = nullptr;
 ID3D11Buffer* GRAPHICS::g_ConstantBuffer_Circles = nullptr;
+ID3D11Buffer* GRAPHICS::g_ConstantBuffer_RT_Info = nullptr;
 ID3D10Blob* GRAPHICS::g_VertexShaderCode = nullptr, * GRAPHICS::g_PixelShaderCode = nullptr, * GRAPHICS::g_DisplayTexturePSCode = nullptr;
 ID3D11VertexShader* GRAPHICS::g_VertexShader = nullptr;
 ID3D11PixelShader* GRAPHICS::g_PixelShader = nullptr;
@@ -46,11 +48,20 @@ uint64_t GRAPHICS::last_frame_render_time = 0;
 Camera* GRAPHICS::g_pMainCamera = nullptr;
 bool GRAPHICS::g_UseCorrectedGamma = false;
 
+IDXGIDebug* GRAPHICS::g_pDXGIDebug = nullptr;
+
 // The actual camera used to "render" vertices
 Camera* pVertexCamera = nullptr;
 
 
 #define GET_ACTUAL_CB_SIZE(size) (sizeof(size) + (16 - (sizeof(size) % 16)))
+
+template<UINT TNameLength>
+void SET_DXGI_DEBUG_NAME(ID3D11DeviceChild* handle, const char (&name)[TNameLength]) {
+#ifdef _DEBUG
+	handle->SetPrivateData(WKPDID_D3DDebugObjectName, sizeof(name) - 1, name);
+#endif
+};
 
 
 // Forward declarations of helper functions
@@ -63,6 +74,8 @@ int (*OnGuiFunc)();
 const auto format = DXGI_FORMAT_R16G16B16A16_FLOAT;//DXGI_FORMAT_R16G16B16A16_FLOAT;
 const auto RTV_format = DXGI_FORMAT_R32G32B32A32_FLOAT;//DXGI_FORMAT_R32G32B32A32_FLOAT;
 const auto SRV_format = DXGI_FORMAT_R32G32B32A32_FLOAT;//DXGI_FORMAT_R16G16B16A16_FLOAT;
+
+bool isFrameUpToDate = false;
 
 //unsigned long long vtx_Count = 0;
 
@@ -85,6 +98,7 @@ void GRAPHICS::SaveFrameToFile(bool advanceFrame)
 
 void GRAPHICS::AdvanceFrame(bool renderFrame)
 {
+	isFrameUpToDate = false;
 	if (renderFrame)
 		SaveFrameToFile(false);
 	HRESULT hr;
@@ -97,7 +111,25 @@ void GRAPHICS::AdvanceFrame(bool renderFrame)
 	CD3D11_SHADER_RESOURCE_VIEW_DESC descSRV(D3D11_SRV_DIMENSION_TEXTURE2D, SRV_format);
 	g_pd3dDeviceContext->ResolveSubresource(g_TargetResourceViewTexture, 0, g_TargetTexture, 0, SRV_format);
 	hr = g_pd3dDevice->CreateShaderResourceView(g_TargetResourceViewTexture, &descSRV, &g_RayTracingLastFrameSRV); // This line causes "memory leak" (-:
+	SET_DXGI_DEBUG_NAME(g_RayTracingLastFrameSRV, "RTX SRV");
 	assert(SUCCEEDED(hr));
+}
+
+// Should probably make 2 separate functions this one and "ApplyRTSettings"
+void GRAPHICS::SetRayTracingSettings(cb_RT_Info info)
+{
+	if (!g_ConstantBuffer_RT_Info)
+		return;
+
+	info.rayCount = info.rayCount == 0 ? 1 : info.rayCount;
+
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	HRESULT hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_RT_Info, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+	assert(SUCCEEDED(hr));
+	CopyMemory(mappedResource.pData, &info, sizeof(cb_RT_Info));
+	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_RT_Info, 0);
+
+	ResetFrame();
 }
 
 bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
@@ -108,6 +140,16 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 		CleanupDeviceD3D();
 		return false;
 	}
+	
+#if defined(DEBUG) | defined(_DEBUG)
+	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
+
+	typedef HRESULT(__stdcall* fPtr)(const IID&, void**);
+	HMODULE hDll = LoadLibrary(L"dxgidebug.dll");
+	fPtr DXGIGetDebugInterface = (fPtr)GetProcAddress(hDll, "DXGIGetDebugInterface");
+
+	DXGIGetDebugInterface(__uuidof(IDXGIDebug), (void**)&g_pDXGIDebug);
+#endif
 
 	OnGuiFunc = DrawGuiFunc;
 
@@ -131,6 +173,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	samplerDesc.MinLOD = 0;
 	samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
 	HRESULT hr = g_pd3dDevice->CreateSamplerState(&samplerDesc, &g_BackBufferSamplerState);
+	SET_DXGI_DEBUG_NAME(g_BackBufferSamplerState, "BB Sampler State");
 	assert(SUCCEEDED(hr));
 
 
@@ -157,6 +200,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 
 	hr = g_pd3dDevice->CreateVertexShader(g_VertexShaderCode->GetBufferPointer(), g_VertexShaderCode->GetBufferSize(), 0, &g_VertexShader);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_VertexShader, "Vertex Shader");
 
 	if (errorBlob) errorBlob->Release();
 
@@ -173,6 +217,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 
 	hr = g_pd3dDevice->CreatePixelShader(g_PixelShaderCode->GetBufferPointer(), g_PixelShaderCode->GetBufferSize(), 0, &g_PixelShader);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_PixelShader, "RT Pixel Shader");
 
 	if (errorBlob) errorBlob->Release();
 
@@ -188,6 +233,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 
 	hr = g_pd3dDevice->CreatePixelShader(g_DisplayTexturePSCode->GetBufferPointer(), g_DisplayTexturePSCode->GetBufferSize(), 0, &g_DisplayTexturePS);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_DisplayTexturePS, "Copy Pixel Shader");
 
 	if (errorBlob) errorBlob->Release();
 
@@ -197,16 +243,26 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 	desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 	desc.MiscFlags = 0;
-	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_CameraTransform));
 	desc.StructureByteStride = 0;
 
+	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_CameraTransform));
 	hr = g_pd3dDevice->CreateBuffer(&desc, 0, &g_ConstantBuffer_Matrix);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_ConstantBuffer_Matrix, "Matrix CB");
 
 	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_PixelShader));
-
 	hr = g_pd3dDevice->CreateBuffer(&desc, 0, &g_ConstantBuffer_Circles);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_ConstantBuffer_Circles, "Spheres CB");
+
+	cb_RT_Info RT_Info_init;
+	RT_Info_init.rayCount = 10;
+	D3D11_SUBRESOURCE_DATA dataInit{0};
+	dataInit.pSysMem = &RT_Info_init;
+	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_RT_Info));
+	hr = g_pd3dDevice->CreateBuffer(&desc, &dataInit, &g_ConstantBuffer_RT_Info);
+	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_ConstantBuffer_RT_Info, "Copy Pixel Shader");
 
 	// Create input layout
 
@@ -218,11 +274,12 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 
 	hr = g_pd3dDevice->CreateInputLayout(inputDesc, _countof(inputDesc), g_VertexShaderCode->GetBufferPointer(), g_VertexShaderCode->GetBufferSize(), &g_InputLayout);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_InputLayout, "Input Layout");
 
 	cb_PixelShader cb_pixelData;
-	cb_pixelData.circle[0] = SphereEq(0.5f, { 0.4f, 0.8f, 0.6f, 0.0f }, -1.f, 0.05f, 6.f );
+	cb_pixelData.circle[0] = SphereEq(0.5f, { 0.4f, 0.8f, 0.6f, 0.0f, 0, 0, 0, 0, MaterialFlags_Selected }, -1.f, 0.05f, 6.f );
 	cb_pixelData.circle[1] = SphereEq(8.0f, { 0.7f, 0.4f, 0.9f}, -0.8f, 8.5f, 7.f );
-	cb_pixelData.circle[2] = SphereEq(0.5f, { 0, 0, 0, 1, 1, 1, 1.f, 4.f }, 0.12f, -1.15f, 6.0f );
+	cb_pixelData.circle[2] = SphereEq(0.5f, { 0, 0, 0, 1, 1, 1, 1.f, 4.f }, 0.12f, -1.15f, 6.0f);
 	cb_pixelData.circle[3] = SphereEq(0.4f, { 1.f, 0.062f, 0.062f }, 1.f, 0.3f, 7.f );
 	cb_pixelData.sphereCount = 4;
 	D3D11_MAPPED_SUBRESOURCE mappedResource;
@@ -233,29 +290,6 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 
 	g_pMainCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 60.f);
 	pVertexCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 90.f);
-
-	return true;
-}
-
-void GRAPHICS::Destroy()
-{
-	CleanupDeviceD3D();
-}
-
-// First frame is not rendered for some reason
-static bool is_set_up = false;
-
-int GRAPHICS::RenderFrame()
-{
-	auto frame_start_time = std::chrono::steady_clock::now();
-	float clearColor[4] = { 0.1f, 0.1f, 0.1f, 1.f };
-
-	HRESULT hr;
-
-	g_pd3dDeviceContext->ClearDepthStencilView(g_DepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1u, 1u);
-	g_pd3dDeviceContext->ClearRenderTargetView(g_rayTracingRTV, clearColor);
-
-	g_pd3dDeviceContext->OMSetRenderTargets(1, &g_rayTracingRTV, 0);
 
 	float aspectRatio = (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN);
 
@@ -281,65 +315,102 @@ int GRAPHICS::RenderFrame()
 	D3D11_BUFFER_DESC bufDesc;
 	ZeroMemory(&bufDesc, sizeof(bufDesc));
 	bufDesc.ByteWidth = sizeof(Vertex) * _countof(myVertices);
-	bufDesc.Usage = D3D11_USAGE_DEFAULT;
+	bufDesc.Usage = D3D11_USAGE_DYNAMIC;
 	bufDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	bufDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
 	hr = g_pd3dDevice->CreateBuffer(&bufDesc, &bufData, &g_VertexBuffer);
 	assert(SUCCEEDED(hr));
 
-	UINT vbStride = sizeof(Vertex), vbOffset = 0;
-	g_pd3dDeviceContext->IASetVertexBuffers(0, 1, &g_VertexBuffer, &vbStride, &vbOffset);
-	g_pd3dDeviceContext->IASetInputLayout(g_InputLayout);
-	g_pd3dDeviceContext->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	SET_DXGI_DEBUG_NAME(g_VertexBuffer, "VertBuffer");
+	OutputDebugStringA("Init Done\n\n");
+
+	return true;
+}
+
+void GRAPHICS::Destroy()
+{
+	CleanupDeviceD3D();
+}
+
+// First frame is not rendered for some reason
+static bool is_set_up = false;
+
+int GRAPHICS::RenderFrame()
+{
+	auto frame_start_time = std::chrono::steady_clock::now();
+	float clearColor[4] = { 0.1f, 0.1f, 0.1f, 1.f };
+
+	HRESULT hr;
+
+	// Do the actual Ray-Tracing
+	if (!isFrameUpToDate) {
+
+		if(g_DepthStencilView)
+		g_pd3dDeviceContext->ClearDepthStencilView(g_DepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1u, 1u);
+		g_pd3dDeviceContext->ClearRenderTargetView(g_rayTracingRTV, clearColor);
+
+		g_pd3dDeviceContext->OMSetRenderTargets(1, &g_rayTracingRTV, 0);
+
+		UINT vbStride = sizeof(Vertex), vbOffset = 0;
+		g_pd3dDeviceContext->IASetVertexBuffers(0, 1, &g_VertexBuffer, &vbStride, &vbOffset);
+		g_pd3dDeviceContext->IASetInputLayout(g_InputLayout);
+		g_pd3dDeviceContext->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 
-	// Update Constant Buffer Data
-	ZeroMemory(&g_cb_CameraTransform_data, sizeof(cb_CameraTransform));
-	CopyMemory(g_cb_CameraTransform_data.camPos, &pVertexCamera->pos, sizeof(float) * 4);
+		// Update Constant Buffer Data
+		ZeroMemory(&g_cb_CameraTransform_data, sizeof(cb_CameraTransform));
+		CopyMemory(g_cb_CameraTransform_data.camPos, &pVertexCamera->pos, sizeof(float) * 4);
 
-	g_cb_CameraTransform_data.frameIdx = frameIdx;
+		g_cb_CameraTransform_data.frameIdx = frameIdx;
 
-	g_cb_CameraTransform_data.mx = pVertexCamera->GetTransformationMatrix();
+		g_cb_CameraTransform_data.mx = pVertexCamera->GetTransformationMatrix();
 
-	float fovFrac = g_pMainCamera->vFov / 90.f;
-	g_cb_CameraTransform_data.viewProj[0] = g_pMainCamera->aspectRatio * fovFrac;
-	g_cb_CameraTransform_data.viewProj[1] = fovFrac;
-	g_cb_CameraTransform_data.viewProj[2] = 1;
+		float fovFrac = g_pMainCamera->vFov / 90.f;
+		g_cb_CameraTransform_data.viewProj[0] = g_pMainCamera->aspectRatio * fovFrac;
+		g_cb_CameraTransform_data.viewProj[1] = fovFrac;
+		g_cb_CameraTransform_data.viewProj[2] = 1;
 
-	g_cb_CameraTransform_data.screenSize[0] = g_pViewport->Width;
-	g_cb_CameraTransform_data.screenSize[1] = g_pViewport->Height;
+		g_cb_CameraTransform_data.screenSize[0] = g_pViewport->Width;
+		g_cb_CameraTransform_data.screenSize[1] = g_pViewport->Height;
 
-	g_cb_CameraTransform_data.renderFlags |= g_UseCorrectedGamma;
+		g_cb_CameraTransform_data.renderFlags |= g_UseCorrectedGamma;
 
-	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_Matrix, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-	assert(SUCCEEDED(hr));
-	CopyMemory(mappedResource.pData, &g_cb_CameraTransform_data, sizeof(cb_CameraTransform));
-	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_Matrix, 0);
-	g_pd3dDeviceContext->VSSetConstantBuffers(0, 1, &g_ConstantBuffer_Matrix);
-	g_pd3dDeviceContext->PSSetConstantBuffers(0, 1, &g_ConstantBuffer_Matrix);
+		D3D11_MAPPED_SUBRESOURCE mappedResource;
+		hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_Matrix, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+		assert(SUCCEEDED(hr));
+		CopyMemory(mappedResource.pData, &g_cb_CameraTransform_data, sizeof(cb_CameraTransform));
+		g_pd3dDeviceContext->Unmap(g_ConstantBuffer_Matrix, 0);
+		g_pd3dDeviceContext->VSSetConstantBuffers(0, 1, &g_ConstantBuffer_Matrix);
+		g_pd3dDeviceContext->PSSetConstantBuffers(0, 1, &g_ConstantBuffer_Matrix);
+		g_pd3dDeviceContext->PSSetConstantBuffers(2, 1, &g_ConstantBuffer_RT_Info);
 
-	g_pd3dDeviceContext->PSSetSamplers(0, 1, &g_BackBufferSamplerState);
-	g_pd3dDeviceContext->PSSetShaderResources(0, 1, &g_RayTracingLastFrameSRV);
+		g_pd3dDeviceContext->VSSetShader(g_VertexShader, 0, 0);
+		g_pd3dDeviceContext->PSSetShader(g_PixelShader, 0, 0);
 
-	g_pd3dDeviceContext->VSSetShader(g_VertexShader, 0, 0);
-	g_pd3dDeviceContext->PSSetShader(g_PixelShader, 0, 0);
+		g_pd3dDeviceContext->Draw(6, 0);
 
-	g_pd3dDeviceContext->Draw(6, 0);
+		isFrameUpToDate = true;
+	}
 
 	// Skip the first (black) frame
 	if (frameIdx == 0 && is_set_up)
 		AdvanceFrame();
 
+	// Just copy either last frame or the newly rendered frame to the visible TargetView
 	float clearColor2[4] = { 0.4f, 0.3f, 0.5f, 1.f };
 	g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clearColor2);
 	g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, NULL);
 
-	g_pd3dDeviceContext->VSSetShader(NULL, 0, 0);
+	g_pd3dDeviceContext->PSSetSamplers(0, 1, &g_BackBufferSamplerState);
+	g_pd3dDeviceContext->PSSetShaderResources(0, 1, &g_RayTracingLastFrameSRV);
+
+	g_pd3dDeviceContext->VSSetShader(g_VertexShader, 0, 0);
 	g_pd3dDeviceContext->PSSetShader(g_DisplayTexturePS, 0, 0);
 
 	// Reuse (almost) all the data setup on the first Draw call.
 	g_pd3dDeviceContext->Draw(6, 0);
+
 
 	if (int GuiRetVal = OnGuiFunc())
 		return GuiRetVal;
@@ -350,6 +421,10 @@ int GRAPHICS::RenderFrame()
 	if (presentRes == DXGI_STATUS_OCCLUDED)
 		Sleep(10);
 
+	if (!is_set_up) {
+		OutputDebugStringA("Init 2 Done\n\n");
+		//g_pDXGIDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+	}
 	is_set_up = true;
 
 	return 0;
@@ -369,31 +444,56 @@ bool CreateDeviceD3D(HWND hWnd)
 	sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	sd.OutputWindow = hWnd;
-	sd.SampleDesc.Count = 1;
+	sd.SampleDesc.Count = 4;
 	sd.SampleDesc.Quality = 0;
 	sd.Windowed = TRUE;
 	sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
 	UINT createDeviceFlags = 0;// D3D11_CREATE_DEVICE_DEBUG;
-	//createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 	D3D_FEATURE_LEVEL featureLevel;
 	const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
 
 	if (D3D11CreateDeviceAndSwapChain(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext) != S_OK)
 		return false;
 
+	SET_DXGI_DEBUG_NAME(g_pd3dDeviceContext, "Dev Context");
+
 	GRAPHICS::CreateRenderTarget();
 	return true;
 }
 
+void ResetVertexBuffer()
+{
+	float aspectRatio = (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN);
+
+	float vert_unit_x = aspectRatio;// tanf(fovRadians * 0.5f)* aspectRatio;
+	float vert_unit_y = 1;// tanf(fovRadians * 0.5f);
+
+	Vertex myVertices[] = {
+	{  -vert_unit_x,  vert_unit_y, 0.f, {1,0,0}, {0.f, 0.f} },
+	{  vert_unit_x, -vert_unit_y, 0.f, {0,1,0}, {1.0f, 1.f} },
+	{ -vert_unit_x, -vert_unit_y, 0.f, {0,0,0}, { 0.f, 1.f} },
+	{  -vert_unit_x,  vert_unit_y, 0.f, {1,0,0}, {0.0f, 0.f} },
+	{  vert_unit_x, vert_unit_y, 0.f, {0,1,0}, {1.0f, 0.f} },
+	{ vert_unit_x, -vert_unit_y, 0.f, {0,0,0}, {1.f, 1.f} },
+	};
+
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	g_pd3dDeviceContext->Map(g_VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+	CopyMemory(mappedResource.pData, &myVertices, sizeof(myVertices));
+	g_pd3dDeviceContext->Unmap(g_VertexBuffer, 0);
+}
+
+void GRAPHICS::WindowResized()
+{
+	ResetVertexBuffer();
+}
+
 void CleanupDeviceD3D()
 {
+	using namespace GRAPHICS;
 	GRAPHICS::CleanupRenderTarget();
-	g_pSwapChain->SetFullscreenState(FALSE, NULL);
-	if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
-	if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
-	if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
-	if (g_pBackBuffer) { g_pBackBuffer->Release(); g_pBackBuffer = NULL; };
 
 	if (g_InputLayout) g_InputLayout->Release();
 	if (g_PixelShader) g_PixelShader->Release();
@@ -401,6 +501,20 @@ void CleanupDeviceD3D()
 	if (g_PixelShaderCode) g_PixelShaderCode->Release();
 	if (g_VertexShaderCode) g_VertexShaderCode->Release();
 	if (g_VertexBuffer) g_VertexBuffer->Release();
+	if (g_DepthStencilBuffer) g_DepthStencilBuffer->Release();
+	if (g_TargetResourceViewTexture) g_TargetResourceViewTexture->Release();
+	if (g_TargetTexture) g_TargetTexture->Release();
+	if (g_BackBufferSamplerState) g_BackBufferSamplerState->Release();
+
+	OutputDebugStringA("\nClosing Report\n");
+	g_pDXGIDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+	OutputDebugStringA("End Report\n\n");
+
+	g_pSwapChain->SetFullscreenState(FALSE, NULL);
+	if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }
+	if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = NULL; }
+	if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
+	//if (g_pBackBuffer) { g_pBackBuffer->Release(); g_pBackBuffer = NULL; };
 }
 
 void GRAPHICS::ResetFrame()
@@ -437,14 +551,18 @@ void GRAPHICS::ResetFrame()
 
 	HRESULT hr = g_pd3dDevice->CreateTexture2D(&texDesc, nullptr, &g_TargetTexture);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_TargetTexture, "Target Tex");
 
 	hr = g_pd3dDevice->CreateTexture2D(&texDesc, nullptr, &g_TargetResourceViewTexture);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_TargetResourceViewTexture, "Target RS Texture");
 
 	CD3D11_RENDER_TARGET_VIEW_DESC rtDesc(D3D11_RTV_DIMENSION_TEXTURE2D, RTV_format);
 	hr = g_pd3dDevice->CreateRenderTargetView(g_TargetTexture, &rtDesc, &g_rayTracingRTV);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_rayTracingRTV, "RT RTV");
 
+	isFrameUpToDate = false;
 	frameIdx = 0;
 	is_set_up = false;
 }
@@ -457,6 +575,7 @@ void GRAPHICS::CreateRenderTarget()
 
 	HRESULT hr = g_pd3dDevice->CreateRenderTargetView(g_pBackBuffer, NULL, &g_mainRenderTargetView);
 	assert(SUCCEEDED(hr));
+	SET_DXGI_DEBUG_NAME(g_mainRenderTargetView, "Main RTV");
 	g_pBackBuffer->Release();
 
 	ResetFrame();
@@ -476,29 +595,3 @@ void GRAPHICS::CleanupRenderTarget()
 	if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = NULL; }
 	if (g_rayTracingRTV) { g_rayTracingRTV->Release(); g_rayTracingRTV = NULL; }
 }
-
-
-// --------- Rendering ---------
-
-//void AddTriangle(Vector3 p1, Vector3 p2, Vector3 p3, float Color[3])
-//{
-//	Vertex myVertices[] = {
-//		{  p1.x, p1.y, p1.z, {1,0,0}, {0.5f, 0.f}},
-//		{  p2.x, p2.y, p2.z, {0,1,0}, {1.0f, 1.f} },
-//		{  p3.x, p3.y, p3.z, {0,0,0}, {0.f, 1.f} },
-//	};
-//	
-//	D3D11_BUFFER_DESC bufDesc;
-//	ZeroMemory(&bufDesc, sizeof(bufDesc));
-//	bufDesc.ByteWidth = sizeof(Vertex) * _countof(myVertices);
-//	bufDesc.Usage = D3D11_USAGE_DEFAULT;
-//	bufDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-//
-//	D3D11_SUBRESOURCE_DATA bufData;
-//	ZeroMemory(&bufData, sizeof(bufData));
-//	bufData.pSysMem = myVertices;
-//
-//	HRESULT hr = g_pd3dDevice->CreateBuffer(&bufDesc, &bufData, &g_VertexBuffer);
-//	assert(SUCCEEDED(hr));
-//	vtx_Count += 3;
-//}

@@ -2,6 +2,12 @@
 
 #include <DirectXMath.h>
 
+enum MaterialFlags
+{
+	MaterialFlags_None = 0,
+	MaterialFlags_Selected = 1 << 0,
+};
+
 struct cb_CameraTransform
 {
 	DirectX::XMMATRIX mx;
@@ -21,8 +27,10 @@ struct Material
 	float emission = 1;
 	float emissionColor[3];
 	float roughness = 0;
+	alignas(16) MaterialFlags material_Flags;
 
-	Material(float r = 1, float g = 1, float b = 1, float _roughness = 1, float er = 0, float eg = 0, float eb = 0, float _emission = 1) : emission(_emission)
+	Material(float r = 1, float g = 1, float b = 1, float _roughness = 1, float er = 0, float eg = 0, float eb = 0, float _emission = 1, MaterialFlags flags = MaterialFlags_None) : emission(_emission),
+		material_Flags(flags)
 	{
 		baseColor[0] = r;
 		baseColor[1] = g;
@@ -35,13 +43,13 @@ struct Material
 		emission = _emission;
 		roughness = _roughness;
 	}
-}; // size [64]
+}; // size [36]
 
 struct SphereEq
 {
 	float pos[3]; // 8 * 3 = 24
-	float radius; // 24 + 8 = 32
-	Material material; // 32 + 64 = 96
+	float radius; // 8
+	alignas(16) Material material; // 36
 
 	SphereEq(float r = 1, Material mat = Material(), float x = 0, float y = 0, float z = 0) : radius(r), material(mat)
 	{
@@ -52,7 +60,7 @@ struct SphereEq
 	}
 
 	//SphereEq() = default;
-}; // Size [96]
+}; // Size [68] (80)
 
 struct cb_PixelShader
 {
@@ -64,4 +72,15 @@ public:
 
 #pragma warning(suppress: 26495) // No need to initialize padding...
 	cb_PixelShader() = default;
+};
+
+struct cb_RT_Info
+{
+	uint32_t rayCount = 10;
+	uint32_t rayMaxBounce = 4;
+
+	cb_RT_Info(const uint32_t rayCount = 0, uint32_t bounce = 4)
+		: rayCount(rayCount), rayMaxBounce(bounce)
+	{
+	}
 };

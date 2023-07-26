@@ -106,11 +106,8 @@ int GUI::DrawGui() noexcept
 	ImGui_ImplDX11_NewFrame();
 	ImGui_ImplWin32_NewFrame();
 	ImGui::NewFrame();
-	//Create ImGui Test Window
-	ImGui::Begin("Scene");
 	if (int GuiRetVal = mainGuiFunc())
 		return GuiRetVal;
-	ImGui::End();
 	//Assemble Together Draw Data
 	ImGui::Render();
 	//Render Draw Data
@@ -146,6 +143,8 @@ void WindowResize()
 		GRAPHICS::CreateRenderTarget();
 		g_pd3dDeviceContext->RSSetViewports(1, g_pViewport);
 	}
+
+	GRAPHICS::WindowResized();
 }
 
 // Forward declare message handler from imgui_impl_win32.cpp
