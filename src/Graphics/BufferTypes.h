@@ -8,6 +8,12 @@ enum MaterialFlags
 	MaterialFlags_Selected = 1 << 0,
 };
 
+static MaterialFlags operator|(MaterialFlags right, MaterialFlags other) { return (MaterialFlags)((uint64_t)right + (uint64_t)other); };
+static MaterialFlags operator^(MaterialFlags right, MaterialFlags other) { return (MaterialFlags)((uint64_t)right ^ (uint64_t)other); };
+static MaterialFlags operator&(MaterialFlags right, MaterialFlags other) { return (MaterialFlags)((uint64_t)right & (uint64_t)other); };
+static MaterialFlags operator|=(MaterialFlags& right, MaterialFlags other) { return right = right | other; };
+static MaterialFlags operator^=(MaterialFlags& right, MaterialFlags other) { return right = right ^ other; };
+
 struct cb_CameraTransform
 {
 	DirectX::XMMATRIX mx;
@@ -62,7 +68,7 @@ struct SphereEq
 	//SphereEq() = default;
 }; // Size [68] (80)
 
-struct cb_PixelShader
+struct cb_Pixel_ObjectData
 {
 	uint32_t sphereCount = 0;
 private:
@@ -71,7 +77,7 @@ public:
 	SphereEq circle[8];
 
 #pragma warning(suppress: 26495) // No need to initialize padding...
-	cb_PixelShader() = default;
+	cb_Pixel_ObjectData() = default;
 };
 
 struct cb_RT_Info
@@ -79,7 +85,7 @@ struct cb_RT_Info
 	uint32_t rayCount = 10;
 	uint32_t rayMaxBounce = 4;
 
-	cb_RT_Info(const uint32_t rayCount = 0, uint32_t bounce = 4)
+	cb_RT_Info(const uint32_t rayCount = 10, uint32_t bounce = 4)
 		: rayCount(rayCount), rayMaxBounce(bounce)
 	{
 	}

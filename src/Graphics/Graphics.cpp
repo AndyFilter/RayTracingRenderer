@@ -39,6 +39,7 @@ ID3D11Texture2D* GRAPHICS::g_DepthStencilBuffer = nullptr;
 ID3D11ShaderResourceView* GRAPHICS::g_RayTracingLastFrameSRV = nullptr;
 ID3D11DepthStencilView* GRAPHICS::g_DepthStencilView = nullptr;
 ID3D11SamplerState* GRAPHICS::g_BackBufferSamplerState = nullptr;
+cb_Pixel_ObjectData* GRAPHICS::g_pCB_Pixel_ObjectData = nullptr;
 unsigned int GRAPHICS::frameIdx = 1;
 float GRAPHICS::g_Viewport_Width = GUI::windowX - WINDOW_X_MARGIN;
 float GRAPHICS::g_Viewport_Height = GUI::windowY - WINDOW_Y_MARGIN;
@@ -115,23 +116,6 @@ void GRAPHICS::AdvanceFrame(bool renderFrame)
 	assert(SUCCEEDED(hr));
 }
 
-// Should probably make 2 separate functions this one and "ApplyRTSettings"
-void GRAPHICS::SetRayTracingSettings(cb_RT_Info info)
-{
-	if (!g_ConstantBuffer_RT_Info)
-		return;
-
-	info.rayCount = info.rayCount == 0 ? 1 : info.rayCount;
-
-	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	HRESULT hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_RT_Info, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-	assert(SUCCEEDED(hr));
-	CopyMemory(mappedResource.pData, &info, sizeof(cb_RT_Info));
-	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_RT_Info, 0);
-
-	ResetFrame();
-}
-
 bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 {
 	// Initialize Direct3D
@@ -144,11 +128,11 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 #if defined(DEBUG) | defined(_DEBUG)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 
-	typedef HRESULT(__stdcall* fPtr)(const IID&, void**);
-	HMODULE hDll = LoadLibrary(L"dxgidebug.dll");
-	fPtr DXGIGetDebugInterface = (fPtr)GetProcAddress(hDll, "DXGIGetDebugInterface");
+	//typedef HRESULT(__stdcall* fPtr)(const IID&, void**);
+	//HMODULE hDll = LoadLibrary(L"dxgidebug.dll");
+	//fPtr DXGIGetDebugInterface = (fPtr)GetProcAddress(hDll, "DXGIGetDebugInterface");
 
-	DXGIGetDebugInterface(__uuidof(IDXGIDebug), (void**)&g_pDXGIDebug);
+	//DXGIGetDebugInterface(__uuidof(IDXGIDebug), (void**)&g_pDXGIDebug);
 #endif
 
 	OnGuiFunc = DrawGuiFunc;
@@ -250,7 +234,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	assert(SUCCEEDED(hr));
 	SET_DXGI_DEBUG_NAME(g_ConstantBuffer_Matrix, "Matrix CB");
 
-	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_PixelShader));
+	desc.ByteWidth = static_cast<UINT>(GET_ACTUAL_CB_SIZE(cb_Pixel_ObjectData));
 	hr = g_pd3dDevice->CreateBuffer(&desc, 0, &g_ConstantBuffer_Circles);
 	assert(SUCCEEDED(hr));
 	SET_DXGI_DEBUG_NAME(g_ConstantBuffer_Circles, "Spheres CB");
@@ -276,19 +260,16 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	assert(SUCCEEDED(hr));
 	SET_DXGI_DEBUG_NAME(g_InputLayout, "Input Layout");
 
-	cb_PixelShader cb_pixelData;
-	cb_pixelData.circle[0] = SphereEq(0.5f, { 0.4f, 0.8f, 0.6f, 0.0f, 0, 0, 0, 0, MaterialFlags_Selected }, -1.f, 0.05f, 6.f );
-	cb_pixelData.circle[1] = SphereEq(8.0f, { 0.7f, 0.4f, 0.9f}, -0.8f, 8.5f, 7.f );
-	cb_pixelData.circle[2] = SphereEq(0.5f, { 0, 0, 0, 1, 1, 1, 1.f, 4.f }, 0.12f, -1.15f, 6.0f);
-	cb_pixelData.circle[3] = SphereEq(0.4f, { 1.f, 0.062f, 0.062f }, 1.f, 0.3f, 7.f );
-	cb_pixelData.sphereCount = 4;
-	D3D11_MAPPED_SUBRESOURCE mappedResource;
-	g_pd3dDeviceContext->Map(g_ConstantBuffer_Circles, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-	CopyMemory(mappedResource.pData, &cb_pixelData, sizeof(cb_PixelShader));
-	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_Circles, 0);
+	g_pCB_Pixel_ObjectData = new cb_Pixel_ObjectData();
+	g_pCB_Pixel_ObjectData->circle[0] = SphereEq(0.5f, { 0.4f, 0.8f, 0.6f, 1.0f, 0.0f, 0, 0, 0 }, -2.f, 0.05f, 6.f );
+	g_pCB_Pixel_ObjectData->circle[1] = SphereEq(8.0f, { 0.7f, 0.4f, 0.9f, 1, 0, 1, 0, 0.0}, -0.8f, 9.f, 7.f );
+	g_pCB_Pixel_ObjectData->circle[2] = SphereEq(0.5f, { 0, 0, 0, 1, 1, 1, 1.f, 4.f }, 0.12f, -1.15f, 6.0f);
+	g_pCB_Pixel_ObjectData->circle[3] = SphereEq(0.4f, { 1.f, 0.062f, 0.062f }, 1.f, 0.3f, 7.f );
+	g_pCB_Pixel_ObjectData->sphereCount = 4;
+	CommitObjectData();
 	g_pd3dDeviceContext->PSSetConstantBuffers(1, 1, &g_ConstantBuffer_Circles);
 
-	g_pMainCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 60.f);
+	g_pMainCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 45.f);
 	pVertexCamera = new Camera({ 0,0,-1,0 }, { 0,0,0,0 }, (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN), 90.f);
 
 	float aspectRatio = (g_pViewport->Width + WINDOW_X_MARGIN) / (g_pViewport->Height + WINDOW_Y_MARGIN);
@@ -328,6 +309,30 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	return true;
 }
 
+// Should probably make 2 separate functions this one and "ApplyRTSettings"
+void GRAPHICS::SetRayTracingSettings(cb_RT_Info info)
+{
+	if (!g_ConstantBuffer_RT_Info)
+		return;
+
+	info.rayCount = info.rayCount == 0 ? 1 : info.rayCount;
+
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	HRESULT hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_RT_Info, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+	assert(SUCCEEDED(hr));
+	CopyMemory(mappedResource.pData, &info, sizeof(cb_RT_Info));
+	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_RT_Info, 0);
+}
+
+void GRAPHICS::CommitObjectData()
+{
+	D3D11_MAPPED_SUBRESOURCE mappedResource;
+	HRESULT hr = g_pd3dDeviceContext->Map(g_ConstantBuffer_Circles, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+	assert(SUCCEEDED(hr));
+	CopyMemory(mappedResource.pData, g_pCB_Pixel_ObjectData, sizeof(cb_Pixel_ObjectData));
+	g_pd3dDeviceContext->Unmap(g_ConstantBuffer_Circles, 0);
+}
+
 void GRAPHICS::Destroy()
 {
 	CleanupDeviceD3D();
@@ -347,7 +352,7 @@ int GRAPHICS::RenderFrame()
 	if (!isFrameUpToDate) {
 
 		if(g_DepthStencilView)
-		g_pd3dDeviceContext->ClearDepthStencilView(g_DepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1u, 1u);
+			g_pd3dDeviceContext->ClearDepthStencilView(g_DepthStencilView, D3D11_CLEAR_DEPTH | D3D11_CLEAR_STENCIL, 1u, 1u);
 		g_pd3dDeviceContext->ClearRenderTargetView(g_rayTracingRTV, clearColor);
 
 		g_pd3dDeviceContext->OMSetRenderTargets(1, &g_rayTracingRTV, 0);
@@ -366,13 +371,13 @@ int GRAPHICS::RenderFrame()
 
 		g_cb_CameraTransform_data.mx = pVertexCamera->GetTransformationMatrix();
 
-		float fovFrac = g_pMainCamera->vFov / 90.f;
+		float fovFrac = g_pMainCamera->vFov / 45.f;
 		g_cb_CameraTransform_data.viewProj[0] = g_pMainCamera->aspectRatio * fovFrac;
 		g_cb_CameraTransform_data.viewProj[1] = fovFrac;
 		g_cb_CameraTransform_data.viewProj[2] = 1;
 
-		g_cb_CameraTransform_data.screenSize[0] = g_pViewport->Width;
-		g_cb_CameraTransform_data.screenSize[1] = g_pViewport->Height;
+		g_cb_CameraTransform_data.screenSize[0] = g_pViewport->Width + WINDOW_X_MARGIN;
+		g_cb_CameraTransform_data.screenSize[1] = g_pViewport->Height + WINDOW_Y_MARGIN;
 
 		g_cb_CameraTransform_data.renderFlags |= g_UseCorrectedGamma;
 
@@ -444,13 +449,13 @@ bool CreateDeviceD3D(HWND hWnd)
 	sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 	sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	sd.OutputWindow = hWnd;
-	sd.SampleDesc.Count = 4;
+	sd.SampleDesc.Count = 2;
 	sd.SampleDesc.Quality = 0;
 	sd.Windowed = TRUE;
 	sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
 	UINT createDeviceFlags = 0;// D3D11_CREATE_DEVICE_DEBUG;
-	createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
+	//createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 	D3D_FEATURE_LEVEL featureLevel;
 	const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
 
@@ -487,6 +492,9 @@ void ResetVertexBuffer()
 
 void GRAPHICS::WindowResized()
 {
+	//pVertexCamera->UpdateTransformMatrix();
+	//g_pMainCamera->UpdateTransformMatrix();
+		
 	ResetVertexBuffer();
 }
 
@@ -506,9 +514,9 @@ void CleanupDeviceD3D()
 	if (g_TargetTexture) g_TargetTexture->Release();
 	if (g_BackBufferSamplerState) g_BackBufferSamplerState->Release();
 
-	OutputDebugStringA("\nClosing Report\n");
-	g_pDXGIDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
-	OutputDebugStringA("End Report\n\n");
+	//OutputDebugStringA("\nClosing Report\n");
+	//g_pDXGIDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+	//OutputDebugStringA("End Report\n\n");
 
 	g_pSwapChain->SetFullscreenState(FALSE, NULL);
 	if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = NULL; }

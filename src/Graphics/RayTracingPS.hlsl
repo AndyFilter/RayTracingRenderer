@@ -186,13 +186,12 @@ float3 TraceRay(Ray ray, inout uint rngState)
         if (!hit.wasHit)
             break;
         
-        if (hit.mat.matFlags & MaterialFlags_Selected == MaterialFlags_Selected)
-        {
-            float alpha = 1 - abs(dot(hit.normal, ray.dir));
-            if (alpha > 0.85)
-                return float3(1, 1, 1);
-
-        }
+        //if ((hit.mat.matFlags & MaterialFlags_Selected) == MaterialFlags_Selected)
+        //{
+        //    float alpha = 1 - abs(dot(hit.normal, ray.dir));
+        //    if (alpha > 0.85)
+        //        return float3(1, 1, 1);
+        //}
         
         Material material = hit.mat;
             
@@ -251,7 +250,6 @@ PixelOutput main(PixelInput pixelInput)
     for (int rayIdx = 0; rayIdx < MAX_RAY_COUNT; rayIdx++)
     {
         TotalIncomingLight += TraceRay(ray, rngState);
-
     }
     float3 lastFrameColor = backTex.Sample(texSampler, pixelInput.uv).xyz;
 
@@ -266,5 +264,6 @@ PixelOutput main(PixelInput pixelInput)
     output.color = float4(accumulatedCol, 1);
     
     
+    //output.color = float4(pixelInput.position, 1);
     return output;
 }

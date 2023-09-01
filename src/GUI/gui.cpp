@@ -71,6 +71,8 @@ HWND GUI::Setup(HINSTANCE instance, int (*OnGuiFunc)())
 	style.PopupRounding = 4.0f;
 	style.GrabRounding = 4.0f;
 
+	style.Colors[ImGuiCol_WindowBg] = ImColor(4, 4, 4, 220);
+
 	IDXGIDevice* pDXGIDevice = nullptr;
 	auto hr = GRAPHICS::g_pd3dDevice->QueryInterface(__uuidof(IDXGIDevice), (void**)&pDXGIDevice);
 
@@ -108,6 +110,11 @@ int GUI::DrawGui() noexcept
 	ImGui::NewFrame();
 	if (int GuiRetVal = mainGuiFunc())
 		return GuiRetVal;
+
+#ifdef _DEBUG 
+	ImGui::ShowDemoWindow();
+#endif // DEBUG
+
 	//Assemble Together Draw Data
 	ImGui::Render();
 	//Render Draw Data
@@ -213,8 +220,6 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	}
 	case WM_SYSKEYDOWN:
 		//if (wParam == VK_RETURN && (lParam & 0x60000000) == 0x20000000) {
-		//	windowSize_X = 3440;
-		//	windowSize_Y = 1440;
 		//	WindowResize();
 		//	GRAPHICS::g_pSwapChain->SetFullscreenState(TRUE, nullptr);
 		//	restore_clicked = false;

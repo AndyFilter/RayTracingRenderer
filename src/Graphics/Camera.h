@@ -7,8 +7,8 @@ using namespace DirectX;
 class Camera
 {
 public:
-	float vFov = 90;
-	float aspectRatio = 1;
+	float vFov = 90; // Vertical Field Of View In Degrees
+	float aspectRatio = 1; // Width / Height
 	float nearZ = 0.1f;
 	float farZ = 100.f;
 	XMVECTOR pos{};
@@ -63,7 +63,7 @@ private:
 
 	XMMATRIX local2worldMatrix{};
 
-	float vFov_rad = 1.57f;
+	float vFov_rad = XM_PIDIV2;
 
 	void UpdateProjMatrix()
 	{

@@ -42,6 +42,7 @@ namespace GRAPHICS
 	extern IDXGIDebug* g_pDXGIDebug;
 
 	extern cb_CameraTransform g_cb_CameraTransform_data;
+	extern cb_Pixel_ObjectData* g_pCB_Pixel_ObjectData;
 
 	extern uint64_t last_frame_render_time;
 
@@ -68,6 +69,7 @@ namespace GRAPHICS
 	void AdvanceFrame(bool renderFrame = false);
 
 	void SetRayTracingSettings(cb_RT_Info info);
+	void CommitObjectData();
 
 	Vertex cur_vtx_arr[];
 }
