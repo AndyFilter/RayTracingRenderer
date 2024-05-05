@@ -112,7 +112,7 @@ int GUI::DrawGui() noexcept
 		return GuiRetVal;
 
 #ifdef _DEBUG 
-	ImGui::ShowDemoWindow();
+	//ImGui::ShowDemoWindow();
 #endif // DEBUG
 
 	//Assemble Together Draw Data
