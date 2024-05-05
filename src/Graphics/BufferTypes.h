@@ -68,13 +68,15 @@ struct SphereEq
 	//SphereEq() = default;
 }; // Size [68] (80)
 
+#define MAX_SPHERE_COUNT 8
+
 struct cb_Pixel_ObjectData
 {
 	uint32_t sphereCount = 0;
 private:
 	float _padding1[3];
 public:
-	SphereEq circle[8];
+	SphereEq circle[MAX_SPHERE_COUNT];
 
 #pragma warning(suppress: 26495) // No need to initialize padding...
 	cb_Pixel_ObjectData() = default;

@@ -127,7 +127,7 @@ float4 main(PixelInput input) : SV_TARGET
     //if (abs((input.uv.y * 14) % 1) < 0.03)
     //    texColor += float4(0.3, 0.3, 0.3, 0);
     
-    const float selectedCircleScale = 0.6;
+    const float selectedCircleScale = 0.02;
 
     // Outline round selected spheres
     for (int i = 0; i < sphereCount; i++)
@@ -148,7 +148,7 @@ float4 main(PixelInput input) : SV_TARGET
         //texColor.xyz = lerp(texColor.xyz, float3(1.0, 1.0, 0.0), (1.0 - smoothstep(0.00, 0.01, sdSegment(proj.center - proj.axisB, proj.center + proj.axisB, p))));
         
         float impl = proj.a * p.x * p.x + proj.b * p.y * p.y + proj.c * p.x * p.y + proj.d * p.x + proj.e * p.y + proj.f;
-        if (sqrt(abs(impl) / scale) < selectedCircleScale)
+        if (abs(impl) / radius / sqrt(dist) < selectedCircleScale)
             texColor.xyz = float3(1, 1, 0.92);
     }
     

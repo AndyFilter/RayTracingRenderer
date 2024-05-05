@@ -11,7 +11,12 @@
 #include <D3DX11tex.h>
 #include <cstdarg>
 
+#pragma comment(lib, "d3d11.lib") 
+#pragma comment(lib, "d3dx11.lib") 
+#pragma comment(lib, "dxguid.lib") 
+// you might need to add $(DXSDK_DIR)\Lib\{x64/x86} to your Additional Library Directiories
 
+// Imagine using classes in c++
 using namespace GRAPHICS;
 
 IDXGISwapChain* GRAPHICS::g_pSwapChain = nullptr;
@@ -84,11 +89,11 @@ void GRAPHICS::SaveFrameToFile(bool advanceFrame)
 {
 	HRESULT hr;
 
-	g_pd3dDeviceContext->ResolveSubresource(g_pBackBuffer, 0, g_TargetTexture, 0, g_UseCorrectedGamma ? format : SRV_format);
+	g_pd3dDeviceContext->ResolveSubresource(g_pBackBuffer, 0, g_TargetTexture, 0, format);
 	std::string fileName = "Rendered/Frame";
 	fileName += std::to_string(frameIdx);
 	fileName += ".png";
-	hr = D3DX11SaveTextureToFileA(g_pd3dDeviceContext, g_pBackBuffer, D3DX11_IFF_PNG, fileName.c_str());
+	hr = D3DX11SaveTextureToFileA(g_pd3dDeviceContext, g_TargetTexture, D3DX11_IFF_PNG, fileName.c_str());
 	assert(SUCCEEDED(hr));
 
 	if (advanceFrame)
@@ -180,6 +185,14 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 		"vs_5_0", D3DCOMPILE_SKIP_OPTIMIZATION, 0, &g_VertexShaderCode,
 		&errorBlob);
 
+	// If failed try to get the vertex shader from the local directory instead
+	if (!SUCCEEDED(hr))
+	{
+		hr = D3DCompileFromFile((wpath + L"BasicVertexShader.hlsl").c_str(), nullptr, nullptr, "main",
+			"vs_5_0", 0, 0, &g_VertexShaderCode,
+			&errorBlob);
+	}
+
 	assert(SUCCEEDED(hr));
 
 	hr = g_pd3dDevice->CreateVertexShader(g_VertexShaderCode->GetBufferPointer(), g_VertexShaderCode->GetBufferSize(), 0, &g_VertexShader);
@@ -197,6 +210,15 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	hr = D3DCompileFromFile(pixelFragPath.c_str(), nullptr, nullptr, "main",
 		"ps_5_0", 0, 0, &g_PixelShaderCode,
 		&errorBlob);
+
+	// If failed try to get the pixel shader from the local directory instead
+	if (!SUCCEEDED(hr))
+	{
+		hr = D3DCompileFromFile((wpath + L"RayTracingPS.hlsl").c_str(), nullptr, nullptr, "main",
+			"ps_5_0", 0, 0, &g_PixelShaderCode,
+			&errorBlob);
+	}
+
 	assert(SUCCEEDED(hr));
 
 	hr = g_pd3dDevice->CreatePixelShader(g_PixelShaderCode->GetBufferPointer(), g_PixelShaderCode->GetBufferSize(), 0, &g_PixelShader);
@@ -213,6 +235,15 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	hr = D3DCompileFromFile(pixelFragPath.c_str(), nullptr, nullptr, "main",
 		"ps_5_0", 0, 0, &g_DisplayTexturePSCode,
 		&errorBlob);
+
+	// If failed try to get the pixel shader from the local directory instead
+	if (!SUCCEEDED(hr))
+	{
+		hr = D3DCompileFromFile((wpath + L"DisplayTexturePS.hlsl").c_str(), nullptr, nullptr, "main",
+			"ps_5_0", 0, 0, &g_DisplayTexturePSCode,
+			&errorBlob);
+	}
+
 	assert(SUCCEEDED(hr));
 
 	hr = g_pd3dDevice->CreatePixelShader(g_DisplayTexturePSCode->GetBufferPointer(), g_DisplayTexturePSCode->GetBufferSize(), 0, &g_DisplayTexturePS);
@@ -261,7 +292,7 @@ bool GRAPHICS::Setup(int (*DrawGuiFunc)(), HWND hwnd)
 	SET_DXGI_DEBUG_NAME(g_InputLayout, "Input Layout");
 
 	g_pCB_Pixel_ObjectData = new cb_Pixel_ObjectData();
-	g_pCB_Pixel_ObjectData->circle[0] = SphereEq(0.5f, { 0.4f, 0.8f, 0.6f, 1.0f, 0.0f, 0, 0, 0 }, -2.f, 0.05f, 6.f );
+	g_pCB_Pixel_ObjectData->circle[0] = SphereEq(0.5f, { 0.4f, 0.8f, 0.6f, 0.05f, 0.0f, 0, 0, 0 }, -2.f, 0.05f, 6.f );
 	g_pCB_Pixel_ObjectData->circle[1] = SphereEq(8.0f, { 0.7f, 0.4f, 0.9f, 1, 0, 1, 0, 0.0}, -0.8f, 9.f, 7.f );
 	g_pCB_Pixel_ObjectData->circle[2] = SphereEq(0.5f, { 0, 0, 0, 1, 1, 1, 1.f, 4.f }, 0.12f, -1.15f, 6.0f);
 	g_pCB_Pixel_ObjectData->circle[3] = SphereEq(0.4f, { 1.f, 0.062f, 0.062f }, 1.f, 0.3f, 7.f );
@@ -362,6 +393,8 @@ int GRAPHICS::RenderFrame()
 		g_pd3dDeviceContext->IASetInputLayout(g_InputLayout);
 		g_pd3dDeviceContext->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+		//pVertexCamera->lookAtPos.m128_f32[1] = 0.1;
+		//pVertexCamera->UpdateTransformMatrix();
 
 		// Update Constant Buffer Data
 		ZeroMemory(&g_cb_CameraTransform_data, sizeof(cb_CameraTransform));
@@ -422,7 +455,7 @@ int GRAPHICS::RenderFrame()
 
 	last_frame_render_time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - frame_start_time).count();
 
-	auto presentRes = g_pSwapChain->Present(2, 0);
+	auto presentRes = g_pSwapChain->Present(1, 0); // 1 frame for vsync
 	if (presentRes == DXGI_STATUS_OCCLUDED)
 		Sleep(10);
 

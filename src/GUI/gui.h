@@ -12,7 +12,7 @@ namespace GUI
 	int DrawGui() noexcept;
 	void Destroy() noexcept;
 
-	const int windowX = 800, windowY = 600;
+	const int windowX = 1200, windowY = 900;
 	const int min_WindowX = 600, min_WindowY = 500;
 
 	static UINT windowSize_X = windowX;

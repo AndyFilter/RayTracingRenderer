@@ -15,13 +15,14 @@
 + Move camera to it's own class.
 + Spend an entire day on a single bug that no one would even notice.
 - Add UI for rendering frame with selected sample amount and rendering animations.
-- Adding objects.
++ Adding objects.
 + UI for modifying added objects and camera parameters.
 - Switch from using the deprecated D3DX11SaveTextureToFileA to the new lib
 + UI for ray trace settings.
 ~ Clean up RenderFrame in GRAPHICS namespace.
 + Fix gamma when writing to file GRAPHICS::SaveFrameToFile() 
 + Fix shader "random" values
+- Environment light
 
 */
 
@@ -47,6 +48,7 @@ int OnGui()
 	//	}
 	//}
 
+	bool isFrameDirty = false;
 
 	if (ImGui::TreeNodeEx("Rendering", ImGuiTreeNodeFlags_DefaultOpen))
 	{
@@ -76,7 +78,8 @@ int OnGui()
 				clickedTime = (uint64_t)-1;
 			}
 
-			if (ImGui::IsItemActive() && ImGui::IsItemHovered() && (curTime - clickedTime) > 150000000) {
+			static int i = 0; // Used to slow down the advance speed by 2 (it's the modulo in the line below,	\/)
+			if (ImGui::IsItemActive() && ImGui::IsItemHovered() && (curTime - clickedTime) > 150000000 && i++ % 2 == 0) {
 				GRAPHICS::AdvanceFrame(saveFrames);
 			}
 		}
@@ -85,7 +88,7 @@ int OnGui()
 
 		if (ImGui::Button("Reset Image"))
 		{
-			GRAPHICS::ResetFrame();
+			isFrameDirty = true;
 		}
 
 		ImGui::TreePop();
@@ -104,8 +107,10 @@ int OnGui()
 		if (ImGui::IsItemDeactivatedAfterEdit())
 			settingsChanged = true;
 
-		if(settingsChanged)
+		if (settingsChanged) {
 			GRAPHICS::SetRayTracingSettings(local_RT_Info);
+			isFrameDirty = true;
+		}
 
 		ImGui::TreePop();
 	}
@@ -114,6 +119,7 @@ int OnGui()
 	{
 		bool dataChanged = false;
 		bool objectDataChanged = false;
+		//int deletedIdx = -1;
 		for (int i = 0; i < GRAPHICS::g_pCB_Pixel_ObjectData->sphereCount; i++)
 		{
 			char name[10];
@@ -121,7 +127,28 @@ int OnGui()
 
 			ImGui::BeginGroup();
 
-			if (ImGui::TreeNodeEx(name, (GRAPHICS::g_pCB_Pixel_ObjectData->circle[i].material.material_Flags & MaterialFlags_Selected) == MaterialFlags_Selected ? ImGuiTreeNodeFlags_Selected : 0))
+			ImGui::AlignTextToFramePadding();
+			bool treeNodeClicked = ImGui::TreeNodeEx(name, ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowItemOverlap | ((GRAPHICS::g_pCB_Pixel_ObjectData->circle[i].material.material_Flags & MaterialFlags_Selected) == MaterialFlags_Selected ? ImGuiTreeNodeFlags_Selected : 0));
+			ImGui::SameLine();
+			ImGui::Dummy({ ImGui::GetContentRegionAvail().x - 28, 5 });
+			ImGui::SameLine();
+			//ImGui::PushID(1375911 + i);
+			ImGui::PushID(i);
+			if (ImGui::Button("X", {20, 0}))
+			{
+				if(treeNodeClicked)
+					ImGui::TreePop();
+				ImGui::EndGroup();
+				memcpy(GRAPHICS::g_pCB_Pixel_ObjectData->circle + i, GRAPHICS::g_pCB_Pixel_ObjectData->circle + i + 1, (GRAPHICS::g_pCB_Pixel_ObjectData->sphereCount - i - 1) * sizeof(SphereEq));
+				GRAPHICS::g_pCB_Pixel_ObjectData->sphereCount--;
+				i--;
+				objectDataChanged = true;
+				ImGui::PopID();
+				continue;
+			}
+			ImGui::PopID();
+
+			if (treeNodeClicked)
 			{
 				//if (ImGui::SliderFloat3("Pos", GRAPHICS::g_pCB_Pixel_ObjectData->circle[i].pos, -20, 20))
 				if (ImGui::DragFloat3("Pos", GRAPHICS::g_pCB_Pixel_ObjectData->circle[i].pos, 0.1f, -20, 20)) {}
@@ -141,6 +168,8 @@ int OnGui()
 				if (ImGui::DragFloat("Roughness", &GRAPHICS::g_pCB_Pixel_ObjectData->circle[i].material.roughness, 0.005f, 0, 1)) {}
 				if (ImGui::IsItemDeactivatedAfterEdit())
 					objectDataChanged = true;
+
+				ImGui::Separator();
 
 				if (ImGui::DragFloat3("EColor", GRAPHICS::g_pCB_Pixel_ObjectData->circle[i].material.emissionColor, 0.005f, 0, 1)) {}
 				if (ImGui::IsItemDeactivatedAfterEdit())
@@ -166,13 +195,25 @@ int OnGui()
 				dataChanged = true;
 			}
 		}
-		ImGui::TreePop();
+
+		if (ImGui::Button("+", { -1,0 }))
+		{
+			if (GRAPHICS::g_pCB_Pixel_ObjectData->sphereCount < MAX_SPHERE_COUNT)
+			{
+				SphereEq* newSphere = &GRAPHICS::g_pCB_Pixel_ObjectData->circle[GRAPHICS::g_pCB_Pixel_ObjectData->sphereCount++];
+				newSphere->pos[2] = 10;
+				objectDataChanged = true;
+			}
+				
+		}
 
 		if (dataChanged || objectDataChanged) {
 			GRAPHICS::CommitObjectData();
 		}
 		if (objectDataChanged)
-			GRAPHICS::ResetFrame();
+			isFrameDirty = true;
+
+		ImGui::TreePop();
 	}
 
 	if (ImGui::TreeNode("Camera Settings"))
@@ -187,11 +228,14 @@ int OnGui()
 
 		if (dataChanged) {
 			GRAPHICS::g_pMainCamera->Set_vFov(GRAPHICS::g_pMainCamera->vFov);
-			GRAPHICS::ResetFrame();
+			isFrameDirty = true;
 		}
 
 		ImGui::TreePop();
 	}
+
+	if (isFrameDirty)
+		GRAPHICS::ResetFrame();
 
 	//ImGui::ShowDemoWindow();
 
@@ -202,13 +246,20 @@ int OnGui()
 
 int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE, _In_ char* cmdLine, _In_ int showCmd)
 {
+#ifdef _DEBUG
 	AllocConsole();
 	AttachConsole(GetCurrentProcessId());
 	FILE* conStream;
 	freopen_s(&conStream, "CON", "w", stdout);
+#endif
 
 	// Gui sets-up GRAPHICS
 	HWND hwnd = GUI::Setup(instance, OnGui);
+
+	ImGui::GetIO().IniFilename = nullptr;
+
+	// Try to create directory for rendered frames
+	CreateDirectory(L"Rendered", NULL);
 
 	while (true)
 	{
